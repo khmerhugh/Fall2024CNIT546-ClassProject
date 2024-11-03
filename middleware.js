@@ -1,4 +1,3 @@
-///
 let express = require('express')
 let app = express()
 let bodyParser = require('body-parser');
@@ -8,7 +7,7 @@ const { ReadlineParser } = require('@serialport/parser-readline')
 const fs = require('node:fs');
 
 const appId = 13;
-const portTCP = 8889;
+const portTCP = 88;
 
 const portSerial = new SerialPort({
     path: '/dev/ttyUSB0',
@@ -26,7 +25,7 @@ app.get('/', function (req, res) {
 })
 
 app.get('/msgcount', function (req, res) {
-    sendCMD('$MT C=U*12\n');
+    //sendCMD('$MT C=U*12\n');
 
     //portSerial.on('open', () => {
       //portSerial.write('$MT C=U*12\n');
@@ -48,12 +47,13 @@ app.get('/msgcount', function (req, res) {
     //res.end(data);
     //});
     //res.end("foo");
+    res.sendStatus(200);
 })
 
 // Sample stripped data
 // {"time":"2024-11-02T12:19:24.377491567+00:00","deviceName":"WHIN Weather Station #13","description":"MIC of join-request is invalid, make sure keys are correct"}
 app.post('/', function(req, res) { 
-    let d = { "time": req.body.time, "deviceName": req.body.deviceName, "description": req.body.description };
+    let d = { "time": req.body.time, "deviceName": req.body.deviceInfo.deviceName, "description": req.body.description };
     d = JSON.stringify(d);
     fs.appendFile("logs/cnit546_post.log", d+"\n", ()=>{});
     let modemCommand = makeMessage(d);
@@ -83,29 +83,4 @@ function makeMessage(cmd)
 
   cmd = "$" + cmd + "*" + hexsum + "\n";
   return cmd;
-}
-
-function writeToSerial(command) {
-  return new Promise((resolve, reject) => {
-    portSerial.write(command, (err) => {
-      if (err) {
-        reject(err);
-      } else {
-        parser.once('data', (data) => {
-          resolve(data);
-        });
-      }
-    });
-  });
-}
-
-async function sendCMD(cmd) {
-  try {
-    const response = await writeToSerial(cmd);
-    console.log('Response:', response);
-  } catch (err) {
-    console.error('Error:', err);
-  } finally {
-    portSerial.close();
-  }
 }
