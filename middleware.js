@@ -1,3 +1,7 @@
+// middleware.js: Program acts as middleware between Chirpstack HTTP Integration 
+// and SWARM Eval Kit connected by USB serial, in order to send weather station
+// data from remote areas
+
 let express = require('express')
 let app = express()
 let bodyParser = require('body-parser');
@@ -6,9 +10,14 @@ const { SerialPort } = require('serialport');
 const { ReadlineParser } = require('@serialport/parser-readline')
 const fs = require('node:fs');
 
+// all messages to SWARM from this app get marked with application identifier 13 in order
+// to differentiate from messages sent from other applications.
 const appId = 13;
+
+// this app listens for http connections on TCP port 88
 const portTCP = 88;
 
+// configure serial port per requirement to talk to SWARM eval kit
 const portSerial = new SerialPort({
     path: '/dev/ttyUSB0',
     baudRate: 115200,
@@ -17,55 +26,38 @@ const portSerial = new SerialPort({
     stopBits: 1,
     flowControl: 'none'
   });
-//
-const parser = portSerial.pipe(new ReadlineParser());
 
 app.get('/', function (req, res) {
     res.end("Chirpstack-SWARM Middleware running!");
 })
 
-app.get('/msgcount', function (req, res) {
-    //sendCMD('$MT C=U*12\n');
 
-    //portSerial.on('open', () => {
-      //portSerial.write('$MT C=U*12\n');
-      //portSerial.drain(function(){
-        //let foo = portSerial.read(99);
-        //res.end(foo)}
-      //);
-      //let foo = portSerial.read(192);
-      //console.log(foo);
-    //});
-
-    //const parser = portSerial.pipe(new ReadlineParser());
-    
-   // let msg = data;
-    //parser.on('data', function (data) {
-    //  console.log(data)
-    //  msg = data;
-    //portSerial.close();
-    //res.end(data);
-    //});
-    //res.end("foo");
+// Provide web endpoint for Chirpstack message to be posted to middleware.
+// Chirpstack message contains payload from weatherstation device.
+// Sample stripped data:
+// {  "time":"2024-11-06T19:31:05.098454+00:00",
+//    "devEui":"8c1f64ef8811000f",
+//    "fPort":100,
+//    "data":"Ai0C4AEBAAAAADdy7f////8AAPf///////////8="  }
+app.post('/', function(req, res) { 
+    // repackage relevent data from chirpstack
+    let d = { "time": req.body.time, "devEui": req.body.deviceInfo.devEui, "data": req.body.data, "fPort":  req.body.fPort };
+    d = JSON.stringify(d);
+    // create modem command to send SWARM message with chirpstack data as payload
+    let modemCommand = makeMessage(d);
+    // send message to modem
+    portSerial.write(modemCommand);
+    // Append message payload to log file
+    fs.appendFile("logs/cnit546_post.log", JSON.stringify(req.body)+"\n", ()=>{});
     res.sendStatus(200);
 })
 
-// Sample stripped data
-// {"time":"2024-11-02T12:19:24.377491567+00:00","deviceName":"WHIN Weather Station #13","description":"MIC of join-request is invalid, make sure keys are correct"}
-app.post('/', function(req, res) { 
-    let d = { "time": req.body.time, "deviceName": req.body.deviceInfo.deviceName, "description": req.body.description };
-    d = JSON.stringify(d);
-    fs.appendFile("logs/cnit546_post.log", d+"\n", ()=>{});
-    let modemCommand = makeMessage(d);
-    portSerial.write(modemCommand);
-  res.sendStatus(200);
+app.listen(portTCP, 'localhost', () => {
+    console.log('Listening on port  ' + portTCP + '!');
 })
 
-//app.listen(port, 'localhost', () => {
-app.listen(portTCP, () => {
-  console.log('Listening on port  ' + portTCP + '!');
-})
-
+// create SWARM modem message to send to SAT.
+// See modem manual for details on constructing message. 
 function makeMessage(cmd)
 {
   cmd = 'TD AI=' + appId + ',"' + cmd + '"';
