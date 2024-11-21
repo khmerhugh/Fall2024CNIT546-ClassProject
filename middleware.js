@@ -7,7 +7,6 @@ let app = express()
 let bodyParser = require('body-parser');
 app.use(bodyParser.json())
 const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline')
 const fs = require('node:fs');
 
 // all messages to SWARM from this app get marked with application identifier 13 in order
